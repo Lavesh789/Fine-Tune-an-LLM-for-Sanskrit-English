@@ -5,7 +5,7 @@ from peft import PeftModel
 
 # Page Configuration
 st.set_page_config(
-    page_page_title="Sanskrit-English AI Assistant",
+    page_title="Sanskrit-English AI Assistant",  # Fixed typo here
     page_icon="🕉️",
     layout="centered"
 )
