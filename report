@@ -1,0 +1,69 @@
+Problem Understanding
+Fine-tuning a small open-source language model to perform instruction following across Sanskrit $\leftrightarrow$ English tasks 
+(translation, shloka explanation, and Q&A). Sanskrit presents domain-specific challenges, including morphologically dense compound 
+structures (Samasa), euphonic fusion rules (Sandhi), and a low volume of digitally native instruction datasets compared to major 
+modern languages.
+
+Dataset Preparation
+Source & Structure: Built an instruction-following dataset formatted in the Alpaca/ChatML schema featuring instruction, input, and 
+output keys.
+Task Mix: Included parallel Sanskrit–English translation pairs alongside verse context/philosophical explanations.
+Formatting: Converted raw pairs into standard instruction blocks terminated with the model’s special End-Of-Sequence token (<|end_of_text|>).
+
+Base Model Selection
+Model: unsloth/Llama-3.2-1B-Instruct.
+Justification: Llama-3.2-1B offers an optimized transformer architecture featuring Grouped-Query Attention (GQA) and a large 128k 
+context window. It exhibits lower base memory consumption than larger variants while maintaining pre-aligned instruction-following 
+capabilities.
+
+Fine-Tuning Approach
+Methodology: QLoRA (Quantized Low-Rank Adaptation) via Hugging Face peft and Unsloth.
+Quantization: 4-bit NormalFloat (NF4) base weight loading using bitsandbytes.
+Adapters: Target modules configured across linear layers (q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj) with LoRA 
+rank $r=16$ and scaling factor $\alpha=16$.
+Optimization: Supervised Fine-Tuning (SFTTrainer) using adamw_8bit optimizer and a linear learning rate scheduler set to $2 \times 10^{-4}$.
+
+Hardware Constraints & Optimizations
+Environment: Google Colab running on a single T4 GPU (~15 GB VRAM).
+VRAM Optimizations:
+4-bit base model quantization to minimize memory footprint.
+Unsloth gradient checkpointing to reduce activation memory usage during backward passes.\
+Explicit GPU VRAM garbage collection (gc.collect() and torch.cuda.empty_cache()) between training and inference runs to avoid CUDA 
+Out-Of-Memory (OOM) exceptions.
+
+Evaluation Methodology
+Qualitative Baseline Comparisons: Evaluated target output responses before and after applying LoRA adapters.
+Generation Metrics: Monitored training loss convergence across 60–100 steps alongside visual inspection of translation fidelity on 
+held-out Sanskrit prompts (e.g., Satyameva Jayate translation tests).
+
+Failure Cases
+Devanagari Subword Fragmentation: Out-of-vocabulary or complex Sanskrit conjuncts split into granular sub-character tokens, leading 
+to longer token generation sequences and occasional word-ending typos.
+Complex Sandhi Resolution: Unsplit compound Sanskrit words occasionally caused partial hallucination or overly literal translations.
+
+Challenges Encountered
+Memory Errors in Combined Pipelines: Sequentially running training and inference in the same Python process caused VRAM exhaustion 
+without explicit memory flushing or subprocess execution.
+Quantization Trainer Check Failure: Standard SFTTrainer threw runtime errors when receiving pure 4-bit weights until explicitly wrapped
+via prepare_model_for_kbit_training() and get_peft_model().
+Environment Mismatches on Cloud Deployment: CPU deployment on Streamlit Cloud initially failed due to Python 3.14 wheel incompatibilities 
+and heavy GPU dependency imports (bitsandbytes/unsloth), requiring fallback to a CPU-compatible PyTorch/Transformers pipeline.
+
+What Would Be Improved With More Time
+Vocabulary Expansion: Adapt the tokenizer by adding high-frequency Devanagari subwords to reduce token sequence length fragmentation.
+Dataset Scaling: Expand the corpus using larger parallel datasets (e.g., AI4Bharat IndicCorp, OPUS parallel corpora, or Bhagavad Gita 
+verse alignment pairs).
+Automated Quantitative Evaluation: Integrate automated cross-lingual metrics like BLEU or chrF+ across test splits.
+
+
+
+
+
+
+
+
+
+
+
+
+
