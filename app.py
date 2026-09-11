@@ -3,9 +3,9 @@ import streamlit as st
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
 
-# Page Configuration
+# Page Configuration (Fixed title parameter)
 st.set_page_config(
-    page_title="Sanskrit-English AI Assistant",  # Fixed typo here
+    page_title="Sanskrit-English AI Assistant",
     page_icon="🕉️",
     layout="centered"
 )
@@ -15,44 +15,39 @@ st.markdown(
     "Fine-tuned **Llama-3.2-1B** for Sanskrit translation, verse explanations, and philosophical context."
 )
 
-# Model & Tokenizer Loader (Cached to prevent reloading on every click)
-@st.cache_resource(show_spinner="Loading Fine-Tuned Model into Memory...")
+# Model & Tokenizer Loader
+@st.cache_resource(show_spinner="Loading fine-tuned model into memory...")
 def load_model_and_tokenizer():
-    # Base model name
     base_model_name = "unsloth/Llama-3.2-1B-Instruct"
-    # Adapter directory (local path or Hugging Face repository ID)
-    adapter_path = "sanskrit_lora_model" 
+    adapter_path = "sanskrit_lora_model" # Local path or Hugging Face repo ID
 
-    # Load Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(base_model_name)
 
-    # Load Base Model in 16-bit or 8-bit depending on device
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch_dtype = torch.float16 if device == "cuda" else torch.float32
 
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_name,
         torch_dtype=torch_dtype,
-        device_map="auto" if device == "cuda" else None,
-        low_cpu_mem_usage=True
+        low_cpu_mem_usage=True,
+        device_map="auto" if device == "cuda" else None
     )
 
-    # Load and merge/attach PEFT LoRA Adapters
     try:
         model = PeftModel.from_pretrained(base_model, adapter_path)
-    except Exception:
-        # Fallback to base model if adapter folder is not present locally
+    except Exception as e:
+        st.warning(f"Could not load LoRA adapters from '{adapter_path}'. Falling back to base model.")
         model = base_model
 
     model.eval()
     return model, tokenizer, device
 
-# Load artifacts
+# Initialize Model
 try:
     model, tokenizer, device = load_model_and_tokenizer()
-    st.success("Model initialized successfully!")
+    st.success("Model loaded successfully!")
 except Exception as e:
-    st.error(f"Error loading model: {e}")
+    st.error(f"Error initializing model: {e}")
     st.stop()
 
 # Sidebar Controls
@@ -64,21 +59,20 @@ task_type = st.sidebar.selectbox(
 max_tokens = st.sidebar.slider("Max Output Tokens", min_value=32, max_value=512, value=128, step=32)
 temperature = st.sidebar.slider("Temperature", min_value=0.1, max_value=1.0, value=0.3, step=0.1)
 
-# Default Input Examples
+# Input Presets
 default_inputs = {
     "Sanskrit to English Translation": "कर्मण्येवाधिकारस्ते मा फलेषु कदाचन।",
     "Explain Sanskrit Verse": "विद्या ददाति विनयं विनयाद्याति पात्रताम्।",
     "English to Sanskrit Translation": "Truth alone triumphs, not falsehood."
 }
 
-# User Input
 user_input = st.text_area(
     "Enter Sanskrit or English Text:",
     value=default_inputs.get(task_type, ""),
     height=100
 )
 
-# Alpaca Prompt Format
+# Prompt Formatting
 alpaca_prompt = """Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
 ### Instruction:
@@ -90,12 +84,11 @@ alpaca_prompt = """Below is an instruction that describes a task, paired with an
 ### Response:
 {}"""
 
-# Generate Response
+# Inference Pipeline
 if st.button("Generate Answer", type="primary"):
     if not user_input.strip():
         st.warning("Please enter some text first.")
     else:
-        # Set task instruction
         if task_type == "Sanskrit to English Translation":
             instruction = "Translate the following Sanskrit text to English."
         elif task_type == "Explain Sanskrit Verse":
@@ -103,10 +96,9 @@ if st.button("Generate Answer", type="primary"):
         else:
             instruction = "Translate the following English text to Sanskrit."
 
-        # Format prompt
         prompt = alpaca_prompt.format(instruction, user_input, "")
 
-        with st.spinner("Generating output..."):
+        with st.spinner("Generating response..."):
             inputs = tokenizer([prompt], return_tensors="pt").to(device)
 
             with torch.no_grad():
@@ -118,15 +110,12 @@ if st.button("Generate Answer", type="primary"):
                     pad_token_id=tokenizer.eos_token_id
                 )
 
-            # Decode output
             full_response = tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
             
-            # Extract response section after ### Response:
             if "### Response:" in full_response:
                 response = full_response.split("### Response:")[1].strip()
             else:
                 response = full_response
 
-        # Display result
         st.markdown("### Output")
         st.info(response)
